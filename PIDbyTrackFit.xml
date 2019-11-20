@@ -1,0 +1,199 @@
+<!--
+  Top level Marlin steering file defining the ILD reconstruction chain.
+
+  !! WARNING !! This file may have been generated from 'Marlin -n MarlinstdReco.xml'.
+  In this case you will find that :
+  - no <include ref="..."> element is present
+  - some values differ between the constants section and the actual values in the global section or the processor parameter (e.g the compact file).
+    In this case, please refer to values in the global section or the processor parameters and not the constants section !
+
+  Mandatory parameters :
+    * global.LCIOInputFiles : The input lcio input file(s)
+    * constant.lcgeo_DIR : the lcgeo directory must point on the one sourced in your current ilcsoft
+
+  Optional parameters :
+    * constant.DetectorModel : the detector model to use the pre-defined lcgeo_DIR as ${lcgeo_DIR}/ILD/compact/${DetectorModel}/${DetectorModel}.xml
+    * constant.RunOverlay250GeV (350, 500 or 1000 GeV) : whether to run the background overlay. If set to true, you must ensure that the overlay background files are correctly set
+    * constant.PandoraSettingsFile : The pandora settings file to use
+    * constant.PidPDFFile : A single root file name for the PID likelihood processor
+    * constant.PidWeightFiles : A list (space separated) of XML files containing weights for low momentum pi/mu separation (from TMVA)
+
+  Author : Remi Ete, DESY
+-->
+
+
+<marlin>
+  <constants>
+    <!-- ***** Global constant for reconstruction ***** -->
+    <!-- The lcgeo directory where to look for the ILD model -->
+    <constant name="lcgeo_DIR" value="/path/to/lcgeo_DIR" />
+    <!-- ILD detector model -->
+    <constant name="DetectorModel" value="None_Please_specify_one" />
+    <!-- The full compact file name -->
+    <constant name="CompactFile" value="${lcgeo_DIR}/ILD/compact/${DetectorModel}/${DetectorModel}.xml" />
+    <!-- ILD calibration file -->
+    <constant name="CalibrationFile" value="/afs/desy.de/group/flc/pool/radkhory/ILDConfig/StandardConfig/production/Calibration/Calibration_${DetectorModel}.xml" />
+
+    <!-- Whether to run the overlay background -->
+    <!-- WARNING : By setting this value to true (or True), you must ensure that the overlay files are set in the processor parameters -->
+    <constant name="RunOverlay" value="false" />
+    <!-- The center of mass energy (unit GeV). Mainly used for background overlay -->
+    <constant name="CMSEnergy" value="Unknown" />
+    <!-- The energy dependant parameters file to include -->
+    <constant name="EnergyParametersFile" value="/afs/desy.de/group/flc/pool/radkhory/ILDConfig/StandardConfig/production/Config/Parameters${CMSEnergy}GeV.xml" />
+    <!--Whether to run the BeamCal reconstruction-->
+    <constant name="RunBeamCalReco" value="true" />
+    <!--The BeamCal calibration constant, sim hit energy to calibrated calo hit energy-->
+    <constant name="BeamCalCalibrationFactor">79.6</constant>
+
+    <!-- ***** Input files constants ***** -->
+    <!-- Geometry model dependant calibration constants from external file -->
+    <include ref="${CalibrationFile}" />
+
+    <!-- Energy dependant parameters -->
+    <include ref="${EnergyParametersFile}" />
+
+    <!-- Output files constants -->
+    <constant name="OutputBaseName" value="StandardReco" />
+    <constant name="AIDAFileName" value="${OutputBaseName}_AIDA" />
+    <constant name="TrkOutputFile" value="${OutputBaseName}_GOFTrkFit.root" />
+  </constants>
+
+
+  <!-- ***** Execute section ***** -->
+  <execute>
+
+	<!-- Initialization processors -->
+	<processor name="MyAIDAProcessor" condition="" />
+	<processor name="InitDD4hep" condition="" />
+	<processor name="MyStatusmonitor" condition="" />
+
+	<processor name="MyPIDbyTrkFit" condition="" />
+
+  </execute>
+
+  <!-- ***** Global section ***** -->
+  <global>
+    <parameter name="LCIOInputFiles">/nfs/dust/ilc/user/radkhory/calib_samples/TrackerSamples/ParticleGun/FitFiles/Protons_Angle_85_Mom_25_Refit_REC.slcio </parameter>
+    <parameter name="MaxRecordNumber" value="0"/>
+    <parameter name="SkipNEvents" value="0"/>
+    <parameter name="SupressCheck" value="false"/>
+    <parameter name="Verbosity" options="DEBUG0-4,MESSAGE0-4,WARNING0-4,ERROR0-4,SILENT"> MESSAGE </parameter>
+    <parameter name="RandomSeed" value="1234567890" />
+    <parameter name="OutputSteeringFile" value="PIDbyTrackFitParsed.xml"/>
+  </global>
+
+  <!-- Init processors : histograming, logging, geometry ... -->
+  <processor name="MyAIDAProcessor" type="AIDAProcessor">
+    <!--Processor that handles AIDA files. Creates on directory per processor.  Processors only need to create and fill the histograms, clouds and tuples. Needs to be the first ActiveProcessor-->
+    <!-- compression of output file 0: false >0: true (default) -->
+    <parameter name="Compress" type="int" value="1"/>
+    <!-- filename without extension-->
+    <parameter name="FileName" type="string" value="${AIDAFileName}"/>
+    <!-- type of output file xml (default) or root ( only OpenScientist)-->
+    <parameter name="FileType" type="string" value="root "/>
+  </processor>
+  <processor name="InitDD4hep" type="InitializeDD4hep">
+    <!--InitializeDD4hep reads a compact xml file and initializes the DD4hep::LCDD object-->
+    <!--Name of the DD4hep compact xml file to load-->
+    <parameter name="DD4hepXMLFile" type="string"> ${CompactFile} </parameter>
+  </processor>
+  <processor name="MyStatusmonitor" type="Statusmonitor">
+    <!--Statusmonitor prints out information on running Marlin Job: Prints number of runs run and current number of the event. Counting is sequential and not the run or event ID.-->
+    <!--Print the event number every N events-->
+    <parameter name="HowOften" type="int">1 </parameter>
+    <!--verbosity level of this processor ("DEBUG0-4,MESSAGE0-4,WARNING0-4,ERROR0-4,SILENT")-->
+    <!-- <parameter name="Verbosity" type="string">MESSAGE </parameter> -->
+  </processor>
+
+
+  <!-- Overlay background -->
+  <group name="BgOverlay">
+    <!--Overlay each event with this number of background events. (default 0)-->
+    <parameter name="NumberOverlayEvents" type="int"> 0 </parameter>
+
+    <processor name="BgOverlayWW" type="Overlay">
+      <!--Opens a second (chain of) lcio file(s) and overlays events...-->
+      <!--Add additional background events according to a poisson distribution with this expectation value. (non, if parameter not set)-->
+      <parameter name="expBG" type="double"> ${ExpectedBgWW} </parameter>
+      <!--Name of the lcio input file(s)-->
+      <parameter name="InputFileNames" type="StringVec"> undefined.slcio </parameter>
+    </processor>
+    <processor name="BgOverlayWB" type="Overlay">
+      <!--Opens a second (chain of) lcio file(s) and overlays events...-->
+      <!--Add additional background events according to a poisson distribution with this expectation value. (non, if parameter not set)-->
+      <parameter name="expBG" type="double"> ${ExpectedBgWB} </parameter>
+      <!--Name of the lcio input file(s)-->
+      <parameter name="InputFileNames" type="StringVec"> undefined.slcio </parameter>
+    </processor>
+    <processor name="BgOverlayBW" type="Overlay">
+      <!--Opens a second (chain of) lcio file(s) and overlays events...-->
+      <!--Add additional background events according to a poisson distribution with this expectation value. (non, if parameter not set)-->
+      <parameter name="expBG" type="double"> ${ExpectedBgBW} </parameter>
+      <!--Name of the lcio input file(s)-->
+      <parameter name="InputFileNames" type="StringVec"> undefined.slcio </parameter>
+    </processor>
+    <processor name="BgOverlayBB" type="Overlay">
+      <!--Opens a second (chain of) lcio file(s) and overlays events...-->
+      <!--Add additional background events according to a poisson distribution with this expectation value. (non, if parameter not set)-->
+      <parameter name="expBG" type="double"> ${ExpectedBgBB} </parameter>
+      <!--Name of the lcio input file(s)-->
+      <parameter name="InputFileNames" type="StringVec"> undefined.slcio </parameter>
+    </processor>
+    <processor name="PairBgOverlay" type="Overlay">
+      <!--Opens a second (chain of) lcio file(s) and overlays events...-->
+      <!--Overlay each event with this number of background events. (default 0)-->
+      <parameter name="NumberOverlayEvents" type="int"> 1 </parameter>
+      <!--Name of the lcio input file(s)-->
+      <parameter name="InputFileNames" type="StringVec"> undefined.slcio </parameter>
+      <!--List of collections to exclude for merging-->
+      <!--Exclude BeamCalCollection because overlay is treated in the BeamCalReco itself-->
+      <parameter name="ExcludeCollections" type="StringVec">BeamCalCollection </parameter>
+    </processor>
+  </group>
+
+  <!-- Tracking related : digitization, reconstruction -->
+  <include ref="/afs/desy.de/group/flc/pool/radkhory/ILDConfig/StandardConfig/production/Tracking/TrackingDigi.xml" />
+  <include ref="/afs/desy.de/group/flc/pool/radkhory/ILDConfig/StandardConfig/production/Tracking/TrackingReco.xml" />
+
+  <!-- Calorimeter digitization : Ecal, Hcal, Fcal and Muon -->
+  <include ref="/afs/desy.de/group/flc/pool/radkhory/ILDConfig/StandardConfig/production/CaloDigi/${EcalTechnology}Digi.xml" />
+  <include ref="/afs/desy.de/group/flc/pool/radkhory/ILDConfig/StandardConfig/production/CaloDigi/${HcalTechnology}Digi.xml" />
+  <include ref="/afs/desy.de/group/flc/pool/radkhory/ILDConfig/StandardConfig/production/CaloDigi/FcalDigi.xml" />
+  <include ref="/afs/desy.de/group/flc/pool/radkhory/ILDConfig/StandardConfig/production/CaloDigi/MuonDigi.xml" />
+
+  <!-- Particle Flow reconstruction : PandoraPFA -->
+  <include ref="/afs/desy.de/group/flc/pool/radkhory/ILDConfig/StandardConfig/production/ParticleFlow/PandoraPFA.xml" />
+
+  <!-- Standalone BeamCal reconstruction -->
+  <include ref="/afs/desy.de/group/flc/pool/radkhory/ILDConfig/StandardConfig/production/HighLevelReco/BeamCalReco.xml" />
+
+  <!-- Post reconstruction related : PID, Vertexing, Particle finding, cluster topology -->
+  <include ref="/afs/desy.de/group/flc/pool/radkhory/ILDConfig/StandardConfig/production/HighLevelReco/HighLevelReco.xml" />
+
+    <processor name="MyPIDbyTrkFit" type="PIDbyTrkFit">
+        <!--PfoAnalysis analyses output of PandoraPFANew-->
+        <!--Names of mc particle collection-->
+        <parameter name="MCParticleCollection" type="string" lcioInType="MCParticle">MCParticle</parameter>
+        <!--Names of input Track collection-->
+        <parameter name="MarlinTrkTracksCollection" type="string" lcioInType="Track">MarlinTrkTracks</parameter>
+        <!--Names of input Track collection-->
+        <parameter name="MarlinTrkTracksCollectionElectron" type="string" lcioInType="Track">MarlinTrkTracksElectron</parameter>
+        <!--Names of input Track collection-->
+        <parameter name="MarlinTrkTracksCollectionKaon" type="string" lcioInType="Track">MarlinTrkTracksKaon</parameter>
+        <!--Names of input Track collection-->
+        <parameter name="MarlinTrkTracksCollectionPion" type="string" lcioInType="Track">MarlinTrkTracksPion</parameter>
+        <!--Names of input Track collection-->
+        <parameter name="MarlinTrkTracksCollectionMuon" type="string" lcioInType="Track">MarlinTrkTracksMuon</parameter>
+        <!--Names of input Track collection-->
+        <parameter name="MarlinTrkTracksCollectionProton" type="string" lcioInType="Track">MarlinTrkTracksProton</parameter>
+        <!--Names of Track-MCParticle Relations collection-->
+        <parameter name="MarlinTrkTracksMCTruthLink" type="string" lcioInType="LCRelation">MarlinTrkTracksMCTruthLink</parameter>
+		<!--Name of the output root file-->
+		<parameter name="RootFile" type="string"> ${TrkOutputFile} </parameter>
+        <!--verbosity level of this processor ("DEBUG0-4,MESSAGE0-4,WARNING0-4,ERROR0-4,SILENT")-->
+        <parameter name="Verbosity" type="string">DEBUG</parameter>
+    </processor>
+
+
+</marlin>
