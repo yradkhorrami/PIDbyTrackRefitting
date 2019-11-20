@@ -1,3 +1,6 @@
+#include "PIDbyTrkFit.h"
+#include <iostream>
+
 #include <EVENT/LCCollection.h>
 #include <EVENT/LCFloatVec.h>
 #include <EVENT/LCObject.h>
